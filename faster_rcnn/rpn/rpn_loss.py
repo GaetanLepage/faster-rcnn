@@ -2,43 +2,51 @@ import tensorflow as tf
 from faster_rcnn.utils.box import get_center
 
 
-
-def _classification_loss(true_label, predicted_prob):
+@tf.function
+def _robust_loss(y_true, y_pred):
     """
     TODO
     """
 
-    return
+    diff = y_pred - y_true
 
-def _regression_loss(anchor, predicted_bbox):
-    """
-    TODO
-    """
+    # |x| < 1
+    condition = tf.less_equal(tf.abs(diff), 1)
 
-    ground_truth_bounding_box = anchor.ground_truth_bounding_box
-    x_gt_bbox_center, y_gt_bbox_center = get_center(ground_truth_bounding_box)
+    value_1 = 0.5 * (diff ** 2)
+    value_2 = tf.abs(diff) - tf.constant(value=0.5, shape=tf.shape(diff))
 
-    x_predicted_bbox_center, y_predicted_bbox_center = get_center(predicted_bbox)
+    result = value_1 * condition + value_2 * (1 - condition)
 
-    x_anchor_center = anchor.x_center_in_image
-    y_anchor_center = anchor.y_center_in_image
-
-    t_x = (x_predicted_bbox_center - x_anchor_center) / anchor.width
-    t_y = (y_predicted_bbox_center - y_anchor_center) / anchor.height
-
-    w_pred_box = tf.math.abs()
-
-    t_w = tf.math.log()
-
-    ground_truth_t_vector = None
-    predicted_t_vector = None
+    return result
 
 
-def rpn_loss_wrapper(anchors_aspect_ratio_list,
-                     anchors_area_list,
-                     n_cls=None,
-                     n_reg=None,
-                     lambda_balance=10):
+# class RpnLoss:
+
+    # def __init__(self,
+                 # anchors_aspect_ratio_list,
+                 # anchors_area_list,
+                 # n_cls=None,
+                 # n_reg=None,
+                 # lambda_balance=10):
+        # """
+        # TODO
+
+        # Args:
+            # n_cls: mini-batch size
+            # n_reg: the number number of anchor locations
+            # lambda_balance: the balancing parameter
+        # """
+
+        # self.anchors_aspect_ratio_list = anchors_aspect_ratio_list
+        # self.anchors_area_list = anchors_area_list
+        # self.n_cls = n_cls
+        # self.n_reg = n_reg
+        # self.lambda_balance = lambda_balance
+
+        # self.cls_predictions = tf.Variable()
+
+def rpn_loss_wrapper(lambda_balance=10):
     """
     TODO
 
@@ -48,52 +56,66 @@ def rpn_loss_wrapper(anchors_aspect_ratio_list,
         lambda_balance: the balancing parameter
     """
 
-    def rpn_loss(anchor_list, network_predictions):
+    @tf.function
+    def rpn_loss(ground_truth_tensors, y_pred):
         """
         TODO
         """
 
-        class_predictions, regression_predictions = network_predictions[0], network_predictions[1]
+        n_cls = tf.shape(ground_truth_tensors)[3]
 
-        cls_loss = 0
-        reg_loss = 0
+        feature_map_height, feature_map_width = tf.shape(ground_truth_tensors)[1:2]
+        n_reg = feature_map_height * feature_map_width
 
-        for anchor in anchor_list:
-            true_label = int(anchor.label)
+        mask, y_true_cls, y_true_reg = ground_truth_tensors
 
-            aspect_ratio_index = anchors_aspect_ratio_list.index(anchor.aspect_ratio)
-            area_index = anchors_area_list.index(anchor.area_in_pixels)
-            x_index = anchor.x_center_in_feature_map
-            y_index = anchor.y_center_in_feature_map
-            prob_index = 2 * (area_index * len(anchors_area_list) + aspect_ratio_index)
-
-            # Get the predicted probability from the cls output layer
-            # shape=[FM_WIDTH, FM_HEIGHT, 2*k]
-            # where :
-            #   * FM_WIDTH is the width of the feature map
-            #   * FM_HEIGHT is the height of the feature map
-            #   * k is the number of anchor boxes per location
-            #       k = |anchors_aspect_ratio_list| * |anchors_area_list|
-            predicted_prob = class_predictions[x_index][y_index][prob_index]
+        cls_predictions, reg_predictions = y_pred
 
 
-            cls_loss += _classification_loss(true_label, predicted_prob)
+        ## Classification
+
+        # Compute the binary classification crossentropy loss
+        cls_loss_tensor = tf.keras.backend.binary_crossentropy(target=y_true_cls,
+                                                               output=cls_predictions)
+
+        # Keep only the loss of the selected anchors
+        cls_loss_tensor = tf.boolean_mask(tensor=cls_loss_tensor,
+                                          mask=mask)
+
+        # Sum all the classification losses
+        cls_loss = tf.reduce_sum(cls_loss_tensor)
 
 
-            # Index of the first coordinate
-            pred_box_start_index = 2 * (area_index * len(anchors_area_list) + aspect_ratio_index)
 
-            # Gather the four coordinates of the predicted bounding box
-            pred_box_index_mask = range(pred_box_start_index, pred_box_start_index + 4)
-            predicted_coordinates = regression_predictions[x_index][y_index][pred_box_index_mask]
 
-            reg_loss += _regression_loss(anchor=anchor,
-                                         predicted_bbox=predicted_coordinates)
+        ## Regression
+        reg_loss_tensor = _robust_loss(y_true=y_true_reg,
+                                       y_pred=reg_predictions)
 
-        total_loss = (1 / n_cls) * cls_loss + (lambda_balance / n_reg) * reg_loss
+        cls_gt_mask = tf.cast(x=y_true_cls,
+                              dtype=tf.bool)
+        # from (B, H, W, num_anchors) to (B, H, W, 4*num_anchors)
+        cls_gt_mask = tf.keras.backend.repeat_elements(x=cls_gt_mask,
+                                                       rep=4,
+                                                       axis=-1)
+        # The regression loss is only computed for anchors which
+        #   contain an object.
+        reg_loss_tensor = tf.boolean_mask(tensor=reg_loss_tensor,
+                                          mask=cls_gt_mask)
+
+
+        # from (B, H, W, num_anchors) to (B, H, W, 4*num_anchors)
+        reg_mask = tf.keras.backend.repeat_elements(x=mask,
+                                                    rep=4,
+                                                    axis=-1)
+        # Regression loss is only computed for selected anchors
+        reg_loss_tensor = tf.boolean_mask(tensor=reg_loss_tensor,
+                                          mask=reg_mask)
+
+        # Sum all the regression losses
+        reg_loss = tf.reduce_sum(reg_loss_tensor)
+
+
+        return (1 / n_cls) * cls_loss + (lambda_balance / n_reg) * reg_loss
 
     return rpn_loss
-
-
-
-
