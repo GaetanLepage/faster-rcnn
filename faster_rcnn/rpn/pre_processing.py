@@ -18,16 +18,13 @@ def _create_anchor_objects(image_shape,
     feature_map_height = feature_map_shape[0]
     feature_map_width = feature_map_shape[1]
 
-    image_height = image_shape[0]
-    image_width = image_shape[1]
-
     # We iterate over all sliding window positions (i.e. every pixel of the feature map)
     for x_anchor_center_in_fm in range(feature_map_width):
         for y_anchor_center_in_fm in range(feature_map_height):
 
-            # Transpose anchor center coordinates from feature map to image coordinates
-            x_anchor_center_in_image = int(image_width / feature_map_width) * x_anchor_center_in_fm
-            y_anchor_center_in_image = int(image_height / feature_map_height) * y_anchor_center_in_fm
+            # Transpose anchor center coordinates to normalized coordinates
+            x_anchor_center_normalized = float(x_anchor_center_in_fm) / float(feature_map_width)
+            y_anchor_center_normalized = float(y_anchor_center_in_fm) / float(feature_map_height)
 
             for anchor_area in anchors_area_list:
                 for anchor_aspect_ratio in anchors_aspect_ratio_list:
@@ -35,15 +32,13 @@ def _create_anchor_objects(image_shape,
 
                     anchor = Anchor(area=anchor_area,
                                     aspect_ratio=anchor_aspect_ratio,
-                                    x_center_in_image=x_anchor_center_in_image,
-                                    y_center_in_image=y_anchor_center_in_image,
-                                    x_center_in_feature_map=x_anchor_center_in_fm,
-                                    y_center_in_feature_map=y_anchor_center_in_fm,
+                                    x_center=x_anchor_center_normalized,
+                                    y_center=y_anchor_center_normalized,
+                                    image_shape=image_shape,
                                     ground_truth_bounding_box=None)
 
                     # During training, we ignore anchor boxes that cross image boundaries
-                    if not anchor.is_crossing_image_boundaries(image_width=image_width,
-                                                               image_height=image_height):
+                    if not anchor.is_crossing_image_boundaries():
                         anchor_list.append(anchor)
 
     return anchor_list
@@ -99,7 +94,7 @@ def _map_anchors_and_gt_bbox(ground_truth_bbox_list,
 
     # Remove all the anchors which are neither positive nor negative
     anchor_list = list(filter(lambda anchor: anchor.label is not None,
-                              iterable=anchor_list))
+                              anchor_list))
 
     return anchor_list
 
@@ -120,14 +115,15 @@ def _sample(anchor_list,
     np.random.shuffle(anchor_list)
 
     positive_anchors = list(filter(lambda anchor: anchor.label,
-                                   iterable=anchor_list))
-    num_positive = min(len(positive_anchors), num_anchors / 2)
+                                   anchor_list))
+    num_positive = min(len(positive_anchors), int(num_anchors / 2))
+
     positive_anchors = positive_anchors[:num_positive]
 
     num_negative = num_anchors - num_positive
 
     negative_anchors = list(filter(lambda anchor: not anchor.label,
-                                   iterable=anchor_list))[:num_negative]
+                                   anchor_list))[:num_negative]
 
     sampled_anchors = positive_anchors + negative_anchors
 
@@ -159,12 +155,12 @@ def _generate_gt_tensors(anchor_list,
 
     for anchor in anchor_list:
         # First dimension index [0, feature_map_width]
-        x_index = anchor.x_center_in_feature_map
+        x_index = int(anchor.x_center * float(feature_map_width))
         # Second dimension index [0, feature_map_height]
-        y_index = anchor.y_center_in_feature_map
+        y_index = int(anchor.y_center * float(feature_map_height))
         # Third dimension index [0, num_anchors]
-        aspect_ratio_index = anchors_aspect_ratio_list.index(anchor.aspect_ratio)
-        area_index = anchors_area_list.index(anchor.area_in_pixels)
+        aspect_ratio_index = np.array(anchors_aspect_ratio_list).tolist().index(anchor.aspect_ratio)
+        area_index = np.array(anchors_area_list).tolist().index(anchor.area)
         anchor_index = area_index * len(anchors_area_list) + aspect_ratio_index
 
         ## Mask
@@ -190,16 +186,18 @@ def _generate_gt_tensors(anchor_list,
 
         y_true_reg[y_index][x_index][pred_box_index_mask] = anchor.reg_vector
 
-
     # Convert numpy arrays to tensors
     mask = tf.convert_to_tensor(value=mask,
-                                dtype=tf.bool)
+                                dtype=tf.bool,
+                                name='mask')
 
     y_true_cls = tf.convert_to_tensor(value=y_true_cls,
-                                      dtype=tf.bool)
+                                      dtype=tf.bool,
+                                      name='y_true_cls')
 
     y_true_reg = tf.convert_to_tensor(value=y_true_reg,
-                                      dtype=tf.float32)
+                                      dtype=tf.float32,
+                                      name='y_true_reg')
 
 
     return mask, y_true_cls, y_true_reg

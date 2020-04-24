@@ -34,10 +34,9 @@ class Anchor:
     def __init__(self,
                  area,
                  aspect_ratio,
-                 x_center_in_image,
-                 y_center_in_image,
-                 x_center_in_feature_map,
-                 y_center_in_feature_map,
+                 x_center,
+                 y_center,
+                 image_shape,
                  ground_truth_bounding_box):
 
         self.area = area
@@ -47,11 +46,10 @@ class Anchor:
         self.label = None
         self.reg_vector = None
 
-        self.x_center_in_image = x_center_in_image
-        self.y_center_in_image = y_center_in_image
+        self.image_shape = image_shape
 
-        self.x_center_in_feature_map = x_center_in_feature_map
-        self.y_center_in_feature_map = y_center_in_feature_map
+        self.x_center = x_center
+        self.y_center = y_center
 
         self.coordinates = self.get_anchor_coordinates()
 
@@ -64,26 +62,43 @@ class Anchor:
         Computes the coordinates of the anchor box in the original image setting.
 
         Returns:
-            [x1, y1, x2, y2] the coordinates of the anchor box.
+            [y1, x1, y2, x2] the coordinates of the anchor box.
         """
 
-        self.width = m.sqrt(self.area * self.aspect_ratio)
-        self.height = m.sqrt(self.area / self.aspect_ratio)
+        width_in_pixel = m.sqrt(self.area * self.aspect_ratio)
+        height_in_pixel = m.sqrt(self.area / self.aspect_ratio)
 
-        x_min_anchor = self.x_center_in_image - tf.cast(x=self.width / 2, dtype=tf.int32)
-        y_min_anchor = self.y_center_in_image - tf.cast(x=self.height / 2, dtype=tf.int32)
-        x_max_anchor = self.x_center_in_image + tf.cast(x=self.width / 2, dtype=tf.int32)
-        y_max_anchor = self.y_center_in_image + tf.cast(x=self.height / 2, dtype=tf.int32)
+        image_height, image_width, _ = self.image_shape
 
-        anchor_coordinates = [y_min_anchor,
-                              x_min_anchor,
-                              y_max_anchor,
-                              x_max_anchor]
+        self.width = width_in_pixel / float(image_width)
+        self.height = height_in_pixel / float(image_height)
+
+        # print("anchor area =", self.area)
+        # print("anchor aspect_ratio =", self.aspect_ratio)
+        # print("anchor width  in pixels = ", width_in_pixel)
+        # print("image width = ", image_width)
+        # print("=> anchor normalized width = ", self.width)
+
+        # print("anchor height in pixels = ", height_in_pixel)
+        # print("image height = ", image_height)
+        # print("=> anchor normalized height = ", self.height)
+        # print("###########################")
+
+        x_min_anchor = self.x_center - self.width / 2
+        y_min_anchor = self.y_center - self.height / 2
+        x_max_anchor = self.x_center + self.width / 2
+        y_max_anchor = self.y_center + self.height / 2
+
+        anchor_coordinates = tf.convert_to_tensor(value=[y_min_anchor,
+                                                         x_min_anchor,
+                                                         y_max_anchor,
+                                                         x_max_anchor],
+                                                  dtype=tf.float32)
 
         return anchor_coordinates
 
 
-    def is_crossing_image_boundaries(self, image_width, image_height):
+    def is_crossing_image_boundaries(self):
         """
         Check whether the anchor crosses the image boundary.
 
@@ -95,16 +110,18 @@ class Anchor:
             False otherwise.
         """
 
-        if self.coordinates[0] < 0:
+        y_min, x_min, y_max, x_max = self.coordinates
+
+        if y_min < 0:
             return True
 
-        if self.coordinates[1] < 0:
+        if x_min < 0:
             return True
 
-        if self.coordinates[2] > image_height:
+        if y_max > 1:
             return True
 
-        if self.coordinates[3] > image_width:
+        if x_max > 1:
             return True
 
         return False
@@ -151,8 +168,8 @@ class Anchor:
 
             # Refresh the reg vector
             gt_bbox_x, gt_bbox_y = box.get_center(bounding_box)
-            t_x = (gt_bbox_x - self.x_center_in_image) / self.width
-            t_y = (gt_bbox_y - self.y_center_in_image) / self.height
+            t_x = (gt_bbox_x - self.x_center) / self.width
+            t_y = (gt_bbox_y - self.y_center) / self.height
 
             gt_bbox_width, gt_bbox_height = box.get_width_height(bounding_box)
             t_w = np.log(gt_bbox_width / self.width)

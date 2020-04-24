@@ -33,7 +33,7 @@ def load_image_train(input_image,
     """
 
     # print("image : ", input_image)
-    print("objects : ", objects)
+    # print("objects : ", objects)
     # print("feature_map_shape : ", feature_map_shape)
     # print("anchors_area_list : ", anchors_area_list)
     # print("anchors_aspect_ratio_list : ", anchors_aspect_ratio_list)
@@ -53,7 +53,9 @@ def load_image_train(input_image,
                                            anchors_area_list=anchors_area_list,
                                            anchors_aspect_ratio_list=anchors_aspect_ratio_list)
 
-    return normalize(input_image), ground_truth_tensors
+    result = normalize(input_image), *ground_truth_tensors
+
+    return result
 
 
 def get_load_image_function(feature_map_shape,

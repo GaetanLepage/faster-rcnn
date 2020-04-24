@@ -56,18 +56,26 @@ def rpn_loss_wrapper(lambda_balance=10):
         lambda_balance: the balancing parameter
     """
 
+    # def rpn_loss(mask, y_true_cls, y_true_reg, y_pred):
     @tf.function
     def rpn_loss(ground_truth_tensors, y_pred):
         """
         TODO
         """
 
+        # assert tf.shape(ground_truth_tensors[0]))
+        # print(ground_truth_tensors[0])
+
         n_cls = tf.shape(ground_truth_tensors)[3]
 
-        feature_map_height, feature_map_width = tf.shape(ground_truth_tensors)[1:2]
-        n_reg = feature_map_height * feature_map_width
-
         mask, y_true_cls, y_true_reg = ground_truth_tensors
+
+
+
+        feature_map_height
+        feature_map_width
+        tf.shape(ground_truth_tensors)[1:2]
+        n_reg = feature_map_height * feature_map_width
 
         cls_predictions, reg_predictions = y_pred
 

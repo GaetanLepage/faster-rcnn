@@ -48,18 +48,35 @@ def train_faster_rcnn(rpn_sliding_window_size,
                           loss=rpn_loss)
 
     train_rpn(rpn_model=rpn_model,
-              batch_size=1,
+              batch_size=32,
+              epochs=10,
               feature_map_shape=(16, 16),
               anchors_area_list=anchors_area_list,
               anchors_aspect_ratio_list=anchors_aspect_ratio_list)
 
 
+def rpn_train_step(rpn_model, input_batch, ground_truth):
+
+    with tf.GradientTape() as t:
+        x_pred = rpn_model(input_batch)
+
+        loss_value = rpn_model.optimizer.loss(ground_truth, x_pred)
+
+    gradients = t.gradient(loss_value, rpn_model.trainable_variables)
+    rpn_model.optimizer.apply_gradients(zip(gradients, rpn_model.trainable_variables))
+
+    return loss_value
+
+
+
 def train_rpn(rpn_model,
               batch_size,
+              epochs,
               feature_map_shape,
               anchors_area_list,
               anchors_aspect_ratio_list):
     """
+    TODO
     """
 
     train_dataset, info = tfds.load(name='voc',
@@ -72,47 +89,67 @@ def train_rpn(rpn_model,
 
     logging.info("RPN training : Pre processing training data")
 
-    # train_dataset = train_dataset.map(lambda datapoint: (datapoint['image'], datapoint['objects']['bbox']))
+    num_train_examples = info.splits['train'].num_examples
 
-    # load_function = data.get_load_image_function(feature_map_shape=feature_map_shape,
-                                                 # anchors_area_list=anchors_area_list,
-                                                 # anchors_aspect_ratio_list=anchors_aspect_ratio_list)
+    def pre_process(datapoint):
+        """
+        TODO
+        """
+        image, mask, y_true_cls, y_true_reg = tf.py_function(data.load_image_train,
+                                                             inp=[datapoint['image'],
+                                                                  datapoint['objects']['bbox'],
+                                                                  feature_map_shape,
+                                                                  anchors_area_list,
+                                                                  anchors_aspect_ratio_list],
+                                                             Tout=[tf.float32, tf.bool, tf.bool, tf.float32])
 
-    # train_dataset = train_dataset.map(lambda *datapoint: tf.py_function(load_function,
-                                                                        # inp=datapoint,
-                                                                        # Tout=(tf.bool, tf.bool, tf.float32)),
-                                      # num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        return image, (mask, y_true_cls, y_true_reg)
+
+    train_dataset = train_dataset.map(
+        pre_process)
+        # num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+    for x, y in train_dataset.take(20):
+        print("shape = ", tf.shape(x))
+        # print("y = ", type(y))
+
+    train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+
+    for epoch in range(epochs):
+
+        print("Epoch {}/{}".format(epoch + 1,
+                                   epochs))
+
+        epoch_loss = 0
+
+        for x, y in train_dataset:
+            print("new batch")
+            loss_value = rpn_train_step(rpn_model, x, y)
+            print("Loss = {}", loss_value, end='\r')
+
+            epoch_loss += loss_value
+
+        print("Epoch Loss = {}", loss_value * batch_size / num_train_examples)
 
 
-    train_dataset = train_dataset.map(lambda datapoint: tf.py_function(data.load_image_train,
-                                                                       inp=[datapoint['image'],
-                                                                            datapoint['objects']['bbox'],
-                                                                            feature_map_shape,
-                                                                            anchors_area_list,
-                                                                            anchors_aspect_ratio_list],
-                                                                       Tout=(tf.bool, tf.bool, tf.float32)),
-                                      num_parallel_calls=1)
-                                      # num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-
-    train_dataset = train_dataset.batch(batch_size)
-
-    for x in train_dataset.take(1):
-        print(x)
-
-    rpn_model.fit(x=data)
+    # rpn_model.fit(x=train_dataset,
+                  # batch_size=batch_size,
+                  # epochs=epochs)
 
 
 def train_fast_rcnn():
     """
+    TODO
     """
 
 def fine_tune_rpn():
     """
+    TODO
     """
 
 def fine_tune_fast_rcnn():
     """
+    TODO
     """
 
 
