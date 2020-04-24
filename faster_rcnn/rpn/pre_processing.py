@@ -5,17 +5,21 @@ from faster_rcnn.utils.anchor import Anchor
 
 
 
-def create_anchor_objects(image_width,
-                          image_height,
-                          feature_map_width,
-                          feature_map_height,
-                          anchors_area_list,
-                          anchors_aspect_ratio_list):
+def _create_anchor_objects(image_shape,
+                           feature_map_shape,
+                           anchors_area_list,
+                           anchors_aspect_ratio_list):
     """
     TODO
     """
 
     anchor_list = []
+
+    feature_map_height = feature_map_shape[0]
+    feature_map_width = feature_map_shape[1]
+
+    image_height = image_shape[0]
+    image_width = image_shape[1]
 
     # We iterate over all sliding window positions (i.e. every pixel of the feature map)
     for x_anchor_center_in_fm in range(feature_map_width):
@@ -46,8 +50,8 @@ def create_anchor_objects(image_width,
 
 
 
-def map_anchors_and_gt_bbox(ground_truth_bbox_list,
-                            anchor_list):
+def _map_anchors_and_gt_bbox(ground_truth_bbox_list,
+                             anchor_list):
     """
     TODO
     """
@@ -100,8 +104,8 @@ def map_anchors_and_gt_bbox(ground_truth_bbox_list,
     return anchor_list
 
 
-def sample(anchor_list,
-           num_anchors):
+def _sample(anchor_list,
+            num_anchors):
     """
     TODO
 
@@ -133,15 +137,17 @@ def sample(anchor_list,
 
 
 
-def generate_gt_tensors(anchor_list,
-                        anchors_aspect_ratio_list,
-                        anchors_area_list,
-                        feature_map_width,
-                        feature_map_height):
+def _generate_gt_tensors(anchor_list,
+                         anchors_aspect_ratio_list,
+                         anchors_area_list,
+                         feature_map_shape):
     """
     TODO
     """
     num_anchors = len(anchors_area_list) * len(anchors_aspect_ratio_list)
+
+    feature_map_height = feature_map_shape[0]
+    feature_map_width = feature_map_shape[1]
 
     mask = np.zeros(shape=(feature_map_height, feature_map_width, num_anchors))
 
@@ -190,7 +196,7 @@ def generate_gt_tensors(anchor_list,
                                 dtype=tf.bool)
 
     y_true_cls = tf.convert_to_tensor(value=y_true_cls,
-                                      dtype=tf.float32)
+                                      dtype=tf.bool)
 
     y_true_reg = tf.convert_to_tensor(value=y_true_reg,
                                       dtype=tf.float32)
@@ -200,42 +206,35 @@ def generate_gt_tensors(anchor_list,
 
 
 
-def pre_process_img(image_width,
-                    image_height,
-                    feature_map_width,
-                    feature_map_height,
+def pre_process_img(image_shape,
+                    feature_map_shape,
                     ground_truth_bbox_list,
                     anchors_area_list,
-                    anchors_aspect_ratio_list,
-                    num_anchors):
+                    anchors_aspect_ratio_list):
     """
     TODO
     """
 
-
-    anchor_list = create_anchor_objects(image_width,
-                                        image_height,
-                                        feature_map_width,
-                                        feature_map_height,
-                                        anchors_area_list,
-                                        anchors_aspect_ratio_list)
+    anchor_list = _create_anchor_objects(image_shape,
+                                         feature_map_shape,
+                                         anchors_area_list,
+                                         anchors_aspect_ratio_list)
 
 
 
-    anchor_list = map_anchors_and_gt_bbox(ground_truth_bbox_list=ground_truth_bbox_list,
-                                          anchor_list=anchor_list)
+    anchor_list = _map_anchors_and_gt_bbox(ground_truth_bbox_list=ground_truth_bbox_list,
+                                           anchor_list=anchor_list)
 
     # Select only num_anchors anchor boxes and preserve (as much as possible)
     # balance between classes
-    anchor_list = sample(anchor_list,
-                         num_anchors=num_anchors)
+    anchor_list = _sample(anchor_list,
+                          num_anchors=len(anchors_area_list) * len(anchors_aspect_ratio_list))
 
     # Generate ground truth tensors that have same shapes as the network output layers
-    ground_truth_tensors = generate_gt_tensors(anchor_list=anchor_list,
-                                               anchors_aspect_ratio_list=anchors_aspect_ratio_list,
-                                               anchors_area_list=anchors_area_list,
-                                               feature_map_width=feature_map_width,
-                                               feature_map_height=feature_map_height)
+    ground_truth_tensors = _generate_gt_tensors(anchor_list=anchor_list,
+                                                anchors_aspect_ratio_list=anchors_aspect_ratio_list,
+                                                anchors_area_list=anchors_area_list,
+                                                feature_map_shape=feature_map_shape)
 
 
     return ground_truth_tensors

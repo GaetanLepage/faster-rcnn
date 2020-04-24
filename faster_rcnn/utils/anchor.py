@@ -6,6 +6,8 @@ import numpy as np
 import math as m
 from faster_rcnn.utils import box
 
+import tensorflow as tf
+
 
 class Anchor:
     """
@@ -43,6 +45,7 @@ class Anchor:
 
         # Either 'True' (positive anchor), 'False' (negative anchor) or None
         self.label = None
+        self.reg_vector = None
 
         self.x_center_in_image = x_center_in_image
         self.y_center_in_image = y_center_in_image
@@ -67,10 +70,10 @@ class Anchor:
         self.width = m.sqrt(self.area * self.aspect_ratio)
         self.height = m.sqrt(self.area / self.aspect_ratio)
 
-        x_min_anchor = self.x_center_in_image - (self.width / 2)
-        y_min_anchor = self.y_center_in_image - (self.height / 2)
-        x_max_anchor = self.x_center_in_image + (self.width / 2)
-        y_max_anchor = self.y_center_in_image + (self.height / 2)
+        x_min_anchor = self.x_center_in_image - tf.cast(x=self.width / 2, dtype=tf.int32)
+        y_min_anchor = self.y_center_in_image - tf.cast(x=self.height / 2, dtype=tf.int32)
+        x_max_anchor = self.x_center_in_image + tf.cast(x=self.width / 2, dtype=tf.int32)
+        y_max_anchor = self.y_center_in_image + tf.cast(x=self.height / 2, dtype=tf.int32)
 
         anchor_coordinates = [y_min_anchor,
                               x_min_anchor,

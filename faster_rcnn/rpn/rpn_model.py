@@ -5,7 +5,7 @@ TODO
 
 import tensorflow as tf
 
-def get_base_model():
+def _get_base_model():
 
     base_model = tf.keras.applications.MobileNetV2(weights='imagenet',
                                                    include_top=False)
@@ -29,7 +29,7 @@ def get_base_model():
     return down_stack
 
 @tf.function
-def convert_reg_output(pred_vector,
+def _convert_reg_output(pred_vector,
                        anchor_width,
                        anchor_height,
                        x_anchor_center,
@@ -98,7 +98,7 @@ def rpn_post_processing(cls_output,
                     y_anchor_center_in_image = int(image_height / feature_map_height) * y_index
 
 
-                    bbox_pred_coordinates = convert_reg_output(pred_vector,
+                    bbox_pred_coordinates = _convert_reg_output(pred_vector,
                                                                anchor_width,
                                                                anchor_height,
                                                                x_anchor_center=x_anchor_center_in_image,
@@ -131,7 +131,7 @@ def get_rpn_model(sliding_window_size, num_anchors):
     inputs = tf.keras.Input(shape=(None, None, 3),
                             name='rpn_input_layer')
 
-    feature_extractor = get_base_model()
+    feature_extractor = _get_base_model()
 
     feature_map = feature_extractor(inputs)
 
@@ -140,6 +140,7 @@ def get_rpn_model(sliding_window_size, num_anchors):
 
     sliding_windows_features = tf.keras.layers.Conv2D(filters=n_channels,
                                                       kernel_size=sliding_window_size,
+                                                      activation='relu',
                                                       name='rpn_intermediate_layer')(feature_map)
 
     cls_output = tf.keras.layers.Conv2D(filters=num_anchors,
