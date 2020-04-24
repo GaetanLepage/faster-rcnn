@@ -212,27 +212,45 @@ def pre_process_img(image_shape,
     """
     TODO
     """
+    import time
+
+    print("start preprocessing")
+
+    start = time.time()
 
     anchor_list = _create_anchor_objects(image_shape,
                                          feature_map_shape,
                                          anchors_area_list,
                                          anchors_aspect_ratio_list)
 
+    create_anchor_time = time.time() - start
+    print("create_anchor_time done :", create_anchor_time)
 
 
     anchor_list = _map_anchors_and_gt_bbox(ground_truth_bbox_list=ground_truth_bbox_list,
                                            anchor_list=anchor_list)
+
+    map_time = time.time() - create_anchor_time - start
+    print("map anchors and gt bbox :", map_time)
 
     # Select only num_anchors anchor boxes and preserve (as much as possible)
     # balance between classes
     anchor_list = _sample(anchor_list,
                           num_anchors=len(anchors_area_list) * len(anchors_aspect_ratio_list))
 
+    sampling_time = time.time() - map_time -start
+    print("sample :", sampling_time)
+
     # Generate ground truth tensors that have same shapes as the network output layers
     ground_truth_tensors = _generate_gt_tensors(anchor_list=anchor_list,
                                                 anchors_aspect_ratio_list=anchors_aspect_ratio_list,
                                                 anchors_area_list=anchors_area_list,
                                                 feature_map_shape=feature_map_shape)
+
+    tensor_time = time.time() - sampling_time - start
+    print("generated gt tensors :", tensor_time)
+
+    print("TOTAL TIME =", time.time() - start)
 
 
     return ground_truth_tensors

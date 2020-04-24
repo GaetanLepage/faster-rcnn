@@ -105,13 +105,19 @@ def train_rpn(rpn_model,
 
         return image, (mask, y_true_cls, y_true_reg)
 
-    train_dataset = train_dataset.map(
-        pre_process)
+    # train_dataset = train_dataset.map(
+        # pre_process)
         # num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-    for x, y in train_dataset.take(20):
-        print("shape = ", tf.shape(x))
+    for x in train_dataset.take(20):
+        print("shape = ", tf.shape(x['image']))
+        res =  data.load_image_train(x['image'],
+                                     x['objects']['bbox'],
+                                     feature_map_shape,
+                                     anchors_area_list,
+                                     anchors_aspect_ratio_list)
         # print("y = ", type(y))
+    exit()
 
     train_dataset = train_dataset.batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
